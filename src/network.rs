@@ -23,7 +23,7 @@ pub struct FluidNetwork {
     /// Used names for uniqueness.
     pub used_names: HashSet<String>,
     /// Counter for auto-generated names.
-    pub name_counter: u32,
+    name_counter: u32,
 }
 
 impl FluidNetwork {
@@ -164,7 +164,7 @@ impl FluidNetwork {
                 liquid_mass_flow: 0.,
                 gas_mass_flow: 0.,
                 liquid_specific_enthalpy: 4200., // Dummy, should be based on fluid props
-                gas_specific_enthalpy: 2000., // Dummy, should be based on fluid props
+                gas_specific_enthalpy: 2000.,    // Dummy, should be based on fluid props
             }),
             EdgeType::Thermal => self
                 .current_flows

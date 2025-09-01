@@ -1,7 +1,7 @@
-use fluid_solver::elements::EdgeType;
 use fluid_solver::Edge;
 use fluid_solver::FluidNetwork;
 use fluid_solver::Node;
+use fluid_solver::elements::EdgeType;
 use fluid_solver::elements::{ThermalBoundary, ThermalEdgeImpl, ThermalNode};
 
 fn main() {

@@ -105,7 +105,6 @@ pub enum EdgeType {
     Fluid,
 }
 
-
 /// Trait for edge behavior, including computing flow.
 pub trait EdgeBehavior {
     fn compute_flow(
