@@ -1,3 +1,4 @@
+use fluid_solver::elements::EdgeType;
 use fluid_solver::Edge;
 use fluid_solver::FluidNetwork;
 use fluid_solver::Node;
@@ -36,6 +37,7 @@ fn main() {
         Edge {
             name: None,
             behavior: Box::new(edge_impl),
+            edge_type: EdgeType::Thermal,
         },
         boundary,
         thermal_node,

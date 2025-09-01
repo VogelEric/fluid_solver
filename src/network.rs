@@ -2,9 +2,10 @@
 //!
 //! Uses Vec-based storage with custom indices for safety.
 
-use crate::elements::{Edge, Node};
+use crate::elements::{CurrentNodeState, Edge, EdgeType, ExternalInputs, FlowResult, Node};
 use crate::indices::{EdgeIndex, NodeIndex};
 use std::collections::HashSet;
+use std::f32::consts::E;
 
 /// The core fluid network structure.
 #[derive(Debug)]
@@ -15,6 +16,10 @@ pub struct FluidNetwork {
     pub node_edges: Vec<Vec<EdgeIndex>>,
     /// For each edge, the connected node indices.
     pub edge_nodes: Vec<(NodeIndex, NodeIndex)>,
+    /// Current runtime state of each node.
+    pub current_node_states: Vec<CurrentNodeState>,
+    /// Current runtime flow of each edge.
+    pub current_flows: Vec<FlowResult>,
     /// Used names for uniqueness.
     pub used_names: HashSet<String>,
     /// Counter for auto-generated names.
@@ -29,6 +34,8 @@ impl FluidNetwork {
             edges: Vec::new(),
             node_edges: Vec::new(),
             edge_nodes: Vec::new(),
+            current_node_states: Vec::new(),
+            current_flows: Vec::new(),
             used_names: HashSet::new(),
             name_counter: 1,
         }
@@ -86,11 +93,46 @@ impl FluidNetwork {
         }
     }
 
+    /// Initializes the runtime state for a node.
+    fn initialize_node_state(&self, node: &Node) -> CurrentNodeState {
+        match node {
+            Node::Thermal(node) => CurrentNodeState::Thermal {
+                temperature: node.initial_temp,
+            },
+            Node::Fluid(node) => CurrentNodeState::Fluid {
+                liquid_temperature: None, // Initial as None, can be set later
+                gas_temperature: None,
+                pressure: 101325.0, // Atmospheric, placeholder
+                volume: node.volume,
+                liquid_fraction: node.liquid_fraction,
+            },
+            Node::ThermalBoundary(node) => CurrentNodeState::ThermalBoundary {
+                temperature: node.temperature,
+            },
+            Node::FluidBoundary(node) => CurrentNodeState::FluidBoundary {
+                liquid_temperature: Some(node.temperature),
+                gas_temperature: None, // Placeholder
+                pressure: node.pressure,
+                liquid_fraction: 0.,
+            },
+            Node::FluidJunction(_node) => CurrentNodeState::Fluid {
+                liquid_temperature: None,
+                gas_temperature: None,
+                pressure: 101325.0,   // Placeholder
+                volume: 0.0,          // To be updated
+                liquid_fraction: 0.5, // Placeholder
+            },
+        }
+    }
+
     /// Adds a node and returns its index.
     pub fn add_node(&mut self, mut node: Node, name: Option<&str>) -> NodeIndex {
         // Set the name on the node
         self.set_node_name(&mut node, name);
+        // Initialize state
+        let initial_state = self.initialize_node_state(&node);
         self.nodes.push(node);
+        self.current_node_states.push(initial_state);
         self.node_edges.push(Vec::new()); // Empty connections initially
         NodeIndex::new(self.nodes.len() - 1, self.nodes.len()).unwrap()
     }
@@ -106,6 +148,7 @@ impl FluidNetwork {
         if node1.index() >= self.nodes.len() || node2.index() >= self.nodes.len() {
             return None; // Invalid indices
         }
+        let edge_type = edge.edge_type.clone();
         // Set name on edge
         edge.name = Some(self.generate_unique_name(name, "Edge"));
         self.edges.push(edge);
@@ -116,6 +159,17 @@ impl FluidNetwork {
         self.node_edges[node1.index()].push(edge_index);
         self.node_edges[node2.index()].push(edge_index);
 
+        match edge_type {
+            EdgeType::Fluid => self.current_flows.push(FlowResult::Fluid {
+                liquid_mass_flow: 0.,
+                gas_mass_flow: 0.,
+                liquid_specific_enthalpy: 4200., // Dummy, should be based on fluid props
+                gas_specific_enthalpy: 2000., // Dummy, should be based on fluid props
+            }),
+            EdgeType::Thermal => self
+                .current_flows
+                .push(FlowResult::Thermal { thermal_power: 0. }),
+        }
         Some(edge_index)
     }
 
@@ -150,7 +204,59 @@ impl FluidNetwork {
         None
     }
 
+    /// Phases the network by one time step with given external inputs and time step.
+    pub fn step(&mut self, external_inputs: &ExternalInputs, dt: f64) {
+        // Collect all flow results into `self.current_flows`
+        for (edge_idx, edge) in self.edges.iter().enumerate() {
+            let edge_idx_checked = EdgeIndex::new(edge_idx, self.edges.len()).unwrap();
+            let (node_a_idx, node_b_idx) = self.edge_nodes[edge_idx];
+            let node_a_state = &self.current_node_states[node_a_idx.index()];
+            let node_b_state = &self.current_node_states[node_b_idx.index()];
+            let flow_result = edge.behavior.compute_flow(
+                node_a_idx,
+                node_a_state,
+                node_b_idx,
+                node_b_state,
+                external_inputs,
+            );
+            self.current_flows[edge_idx_checked.index()] = flow_result;
+        }
+
+        // Update node states (simple integration for thermal nodes)
+        for (node_idx, node_state) in self.current_node_states.iter_mut().enumerate() {
+            let node_idx_checked = NodeIndex::new(node_idx, self.nodes.len()).unwrap();
+            if let CurrentNodeState::Thermal { temperature } = node_state {
+                if let Some(node) = self.nodes.get(node_idx) {
+                    if let Node::Thermal(thermal_node) = node {
+                        let mut net_power = 0.0;
+                        // Sum incoming/outgoing thermal power from connected edges
+                        for &edge_idx in &self.node_edges[node_idx] {
+                            let edge_idx = edge_idx.index();
+                            let flow = &self.current_flows[edge_idx];
+                            if let FlowResult::Thermal { thermal_power } = flow {
+                                let (n1, n2) = self.edge_nodes[edge_idx];
+                                // If this node is A, power is positive A to B, else negative
+                                if n1 == node_idx_checked {
+                                    net_power += thermal_power;
+                                } else {
+                                    net_power -= thermal_power;
+                                }
+                            }
+                        }
+                        // Update temperature: dT = power * dt / mass
+                        *temperature += net_power * dt / thermal_node.thermal_mass;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Runs the simulation for a number of steps with constant external inputs and dt.
+    pub fn run(&mut self, external_inputs: &ExternalInputs, dt: f64, num_steps: usize) {
+        for _ in 0..num_steps {
+            self.step(external_inputs, dt);
+        }
+    }
+
     // TODO: Implement simplification and validation methods.
-    // TODO: Implement execution methods: step, run, etc.
-    // These will be added in subsequent phases.
 }

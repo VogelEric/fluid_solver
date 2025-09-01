@@ -3,7 +3,7 @@
 //! These newtypes prevent accidental index errors and enable validation.
 
 /// Represents a valid index into the nodes vector.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeIndex(usize);
 
 impl NodeIndex {
