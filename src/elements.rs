@@ -105,6 +105,19 @@ pub enum EdgeType {
     Fluid,
 }
 
+/// Refactored Edge struct that uses trait objects for flexibility.
+pub struct Edge {
+    pub name: Option<String>,
+    pub behavior: Box<dyn EdgeBehavior>,
+    pub edge_type: EdgeType,
+}
+
+impl std::fmt::Debug for Edge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Edge {{ ... }}")
+    }
+}
+
 /// Trait for edge behavior, including computing flow.
 pub trait EdgeBehavior {
     fn compute_flow(
@@ -250,18 +263,5 @@ impl EdgeBehavior for FluidEdgeImpl {
             liquid_specific_enthalpy: 4200., // Dummy, should be based on upstream conditions
             gas_specific_enthalpy: 2000.,    // Dummy
         }
-    }
-}
-
-/// Refactored Edge struct that uses trait objects for flexibility.
-pub struct Edge {
-    pub name: Option<String>,
-    pub behavior: Box<dyn EdgeBehavior>,
-    pub edge_type: EdgeType,
-}
-
-impl std::fmt::Debug for Edge {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Edge {{ ... }}")
     }
 }
