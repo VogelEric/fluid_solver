@@ -90,6 +90,9 @@ impl FluidNetwork {
             Node::FluidJunction(n) => {
                 n.name = Some(self.generate_unique_name(name, "FluidJunction"));
             }
+            Node::HydrostaticTank(n) => {
+                n.name = Some(self.generate_unique_name(name, "HydrostaticTank"));
+            }
         }
     }
 
@@ -122,6 +125,7 @@ impl FluidNetwork {
                 volume: 0.0,          // To be updated
                 liquid_fraction: 0.5, // Placeholder
             },
+            Node::HydrostaticTank(node) => node.initial_state(),
         }
     }
 
@@ -182,6 +186,7 @@ impl FluidNetwork {
                 Node::ThermalBoundary(n) => &n.name,
                 Node::FluidBoundary(n) => &n.name,
                 Node::FluidJunction(n) => &n.name,
+                Node::HydrostaticTank(n) => &n.name,
             };
             if let Some(n) = node_name {
                 if n == name {
@@ -215,39 +220,36 @@ impl FluidNetwork {
             let flow_result = edge.behavior.compute_flow(
                 node_a_idx,
                 node_a_state,
+                edge.connection_height_a,
                 node_b_idx,
                 node_b_state,
+                edge.connection_height_b,
                 external_inputs,
             );
             self.current_flows[edge_idx_checked.index()] = flow_result;
         }
 
-        // Update node states (simple integration for thermal nodes)
-        for (node_idx, node_state) in self.current_node_states.iter_mut().enumerate() {
+        // Update node states using NodeBehavior trait
+        for node_idx in 0..self.nodes.len() {
             let node_idx_checked = NodeIndex::new(node_idx, self.nodes.len()).unwrap();
-            if let CurrentNodeState::Thermal { temperature } = node_state {
-                if let Some(node) = self.nodes.get(node_idx) {
-                    if let Node::Thermal(thermal_node) = node {
-                        let mut net_power = 0.0;
-                        // Sum incoming/outgoing thermal power from connected edges
-                        for &edge_idx in &self.node_edges[node_idx] {
-                            let edge_idx = edge_idx.index();
-                            let flow = &self.current_flows[edge_idx];
-                            if let FlowResult::Thermal { thermal_power } = flow {
-                                let (n1, n2) = self.edge_nodes[edge_idx];
-                                // If this node is A, power is positive A to B, else negative
-                                if n1 == node_idx_checked {
-                                    net_power += thermal_power;
-                                } else {
-                                    net_power -= thermal_power;
-                                }
-                            }
-                        }
-                        // Update temperature: dT = power * dt / mass
-                        *temperature += net_power * dt / thermal_node.thermal_mass;
-                    }
-                }
-            }
+            let node = &self.nodes[node_idx];
+            let current_state = &self.current_node_states[node_idx];
+            // Collect connected flows with their indices
+            let connected_flows: Vec<(EdgeIndex, FlowResult)> = self.node_edges[node_idx]
+                .iter()
+                .map(|&edge_idx| {
+                    let flow = &self.current_flows[edge_idx.index()];
+                    (edge_idx, flow.clone())
+                })
+                .collect();
+            let new_state = node.compute_new_node_state(
+                current_state,
+                &connected_flows,
+                &external_inputs,
+                node_idx_checked,
+                dt,
+            );
+            self.current_node_states[node_idx] = new_state;
         }
     }
 

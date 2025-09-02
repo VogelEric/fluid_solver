@@ -38,6 +38,8 @@ fn main() {
             name: None,
             behavior: Box::new(edge_impl),
             edge_type: EdgeType::Thermal,
+            connection_height_a: 0.0,  // Default height for now
+            connection_height_b: 0.0,
         },
         boundary,
         thermal_node,

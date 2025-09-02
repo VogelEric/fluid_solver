@@ -4,6 +4,7 @@
 //! and different search algorithms for breakpoint finding.
 
 use std::cmp::Ordering;
+use std::cell::Cell;
 
 /// 1D Lookup Table for fast interpolation of y values from x inputs.
 /// Assumes x is sorted in ascending order.
@@ -11,7 +12,7 @@ use std::cmp::Ordering;
 pub struct LookupTable1D {
     pub x: Vec<f64>,
     pub y: Vec<f64>,
-    last_index: usize, // For stateful search optimization
+    last_index: Cell<usize>, // For stateful search optimization
 }
 
 impl LookupTable1D {
@@ -42,7 +43,7 @@ impl LookupTable1D {
         LookupTable1D {
             x,
             y,
-            last_index: 0,
+            last_index: Cell::new(0),
         }
     }
 
@@ -102,22 +103,22 @@ impl LookupTable1D {
     /// Linearly interpolates y value for given x using stateful search.
     /// Remembers the last index to optimize successive lookups.
     /// Uses clamping for out-of-bounds values.
-    pub fn interpolate_linear_stateful(&mut self, input: f64) -> f64 {
+    pub fn interpolate_linear_stateful(&self, input: f64) -> f64 {
         let len = self.x.len();
         if len == 1 {
             return self.y[0];
         }
 
         if input <= self.x[0] {
-            self.last_index = 0;
+            self.last_index.set(0);
             return self.y[0];
         } else if input >= self.x[len - 1] {
-            self.last_index = len - 1;
+            self.last_index.set(len - 1);
             return self.y[len - 1];
         }
 
         // Check if near last index (within a few indices)
-        let mut i = self.last_index.saturating_sub(2);
+        let mut i = self.last_index.get().saturating_sub(2);
         let mut found = false;
         for k in 0..5 {
             // Check up to 5 indices around last_index
@@ -128,7 +129,7 @@ impl LookupTable1D {
             if self.x[idx] <= input && input <= self.x[idx + 1] {
                 i = idx;
                 found = true;
-                self.last_index = i;
+                self.last_index.set(i);
                 break;
             }
         }
@@ -140,12 +141,12 @@ impl LookupTable1D {
                 .binary_search_by(|&val| val.partial_cmp(&input).unwrap_or(Ordering::Equal))
             {
                 Ok(idx) => {
-                    self.last_index = idx;
+                    self.last_index.set(idx);
                     self.y[idx]
                 }
                 Err(insert_idx) => {
                     i = insert_idx.saturating_sub(1);
-                    self.last_index = i;
+                    self.last_index.set(i);
                     let j = i + 1;
                     let frac = (input - self.x[i]) / (self.x[j] - self.x[i]);
                     self.y[i] + frac * (self.y[j] - self.y[i])
@@ -166,8 +167,8 @@ pub struct LookupTable2D {
     pub x: Vec<f64>,
     pub y: Vec<f64>,
     pub values: Vec<Vec<f64>>, // values[y_index][x_index]
-    last_x_index: usize,
-    last_y_index: usize,
+    last_x_index: Cell<usize>,
+    last_y_index: Cell<usize>,
 }
 
 impl LookupTable2D {
@@ -206,14 +207,14 @@ impl LookupTable2D {
             x,
             y,
             values: new_values,
-            last_x_index: 0,
-            last_y_index: 0,
+            last_x_index: Cell::new(0),
+            last_y_index: Cell::new(0),
         }
     }
 
     /// Performs bilinear interpolation using stateful accelerated search.
     /// Uses clamping for out-of-bounds values and remembers last indices.
-    pub fn interpolate_bilinear_stateful(&mut self, x_input: f64, y_input: f64) -> f64 {
+    pub fn interpolate_bilinear_stateful(&self, x_input: f64, y_input: f64) -> f64 {
         let x_len = self.x.len();
         let y_len = self.y.len();
 
@@ -223,14 +224,14 @@ impl LookupTable2D {
 
         // Find x indices
         let x_idx = if x_input <= self.x[0] {
-            self.last_x_index = 0;
+            self.last_x_index.set(0);
             0
         } else if x_input >= self.x[x_len - 1] {
-            self.last_x_index = x_len - 1;
+            self.last_x_index.set(x_len - 1);
             x_len - 1
         } else {
             // Try accelerated search around last_x_index
-            let start_x = self.last_x_index.saturating_sub(2);
+            let start_x = self.last_x_index.get().saturating_sub(2);
             let mut found_x = false;
             let mut x_i = start_x;
             let max_x = x_len - 1;
@@ -254,14 +255,14 @@ impl LookupTable2D {
 
         // Find y indices
         let y_idx = if y_input <= self.y[0] {
-            self.last_y_index = 0;
+            self.last_y_index.set(0);
             0
         } else if y_input >= self.y[y_len - 1] {
-            self.last_y_index = y_len - 1;
+            self.last_y_index.set(y_len - 1);
             y_len - 1
         } else {
             // Try accelerated search around last_y_index
-            let start_y = self.last_y_index.saturating_sub(2);
+            let start_y = self.last_y_index.get().saturating_sub(2);
             let mut found_y = false;
             let mut y_i = start_y;
             let max_y = y_len - 1;
@@ -283,8 +284,8 @@ impl LookupTable2D {
             }
         };
 
-        self.last_x_index = x_idx;
-        self.last_y_index = y_idx;
+        self.last_x_index.set(x_idx);
+        self.last_y_index.set(y_idx);
 
         let x1_idx = (x_idx + 1).min(x_len - 1);
         let y1_idx = (y_idx + 1).min(y_len - 1);
@@ -399,14 +400,14 @@ mod tests {
 
     #[test]
     fn test_lookup_table_1d_single_point() {
-        let mut table = LookupTable1D::new(vec![5.0], vec![10.0]);
+        let table = LookupTable1D::new(vec![5.0], vec![10.0]);
         assert_float_relative_eq!(table.interpolate_linear_binary_search(5.0), 10.0);
         assert_float_relative_eq!(table.interpolate_linear_stateful(5.0), 10.0);
     }
 
     #[test]
     fn test_lookup_table_1d_clamping() {
-        let mut table = LookupTable1D::new(vec![1.0, 2.0, 3.0], vec![10.0, 20.0, 30.0]);
+        let table = LookupTable1D::new(vec![1.0, 2.0, 3.0], vec![10.0, 20.0, 30.0]);
         assert_float_relative_eq!(table.interpolate_linear_binary_search(0.5), 10.0); // Below min
         assert_float_relative_eq!(table.interpolate_linear_stateful(0.5), 10.0);
         assert_float_relative_eq!(table.interpolate_linear_linear_search(3.5), 30.0); // Above max
@@ -414,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_lookup_table_1d_interpolation() {
-        let mut table = LookupTable1D::new(vec![1.0, 2.0, 3.0], vec![10.0, 20.0, 30.0]);
+        let table = LookupTable1D::new(vec![1.0, 2.0, 3.0], vec![10.0, 20.0, 30.0]);
         assert_float_relative_eq!(table.interpolate_linear_linear_search(1.5), 15.0);
         assert_float_relative_eq!(table.interpolate_linear_binary_search(1.5), 15.0);
         assert_float_relative_eq!(table.interpolate_linear_stateful(1.5), 15.0);
@@ -454,7 +455,7 @@ mod tests {
 
     #[test]
     fn test_lookup_table_2d_stateful_bilinear() {
-        let mut table = LookupTable2D::new(
+        let table = LookupTable2D::new(
             vec![1.0, 2.0, 3.0],
             vec![4.0, 5.0],
             vec![vec![10.0, 20.0, 30.0], vec![40.0, 50.0, 60.0]],
