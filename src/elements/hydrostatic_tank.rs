@@ -121,8 +121,16 @@ impl HydrostaticTank {
     ///
     /// # Returns
     /// A new HydrostaticTank instance
-    pub fn conical(bottom_radius: f64, top_radius: f64, height: f64, liquid_density: f64, gas_gamma: f64) -> Self {
-        let area = std::f64::consts::PI * (bottom_radius + top_radius) * (bottom_radius + top_radius) / 4.0;
+    pub fn conical(
+        bottom_radius: f64,
+        top_radius: f64,
+        height: f64,
+        liquid_density: f64,
+        gas_gamma: f64,
+    ) -> Self {
+        let area =
+            std::f64::consts::PI * (bottom_radius + top_radius) * (bottom_radius + top_radius)
+                / 4.0;
         let volume = area * height;
 
         Self {
@@ -182,7 +190,8 @@ impl HydrostaticTank {
         let clamped_volume = liquid_volume.clamp(0.0, max_volume);
 
         // Use linear search for immutable access (slightly slower but thread-safe)
-        self.volume_to_height_table.interpolate_linear_stateful(clamped_volume)
+        self.volume_to_height_table
+            .interpolate_linear_stateful(clamped_volume)
     }
 
     /// Calculates gas pressure based on gas law expansion/compression
@@ -194,7 +203,12 @@ impl HydrostaticTank {
     ///
     /// # Returns
     /// Updated gas pressure (Pa)
-    pub fn calculate_gas_pressure(&self, current_height: f64, reference_pressure: f64, reference_height: f64) -> f64 {
+    pub fn calculate_gas_pressure(
+        &self,
+        current_height: f64,
+        reference_pressure: f64,
+        reference_height: f64,
+    ) -> f64 {
         let current_gas_height = self.max_height - current_height;
         let reference_gas_height = self.max_height - reference_height;
 
@@ -303,7 +317,12 @@ impl NodeBehavior for HydrostaticTank {
     ///
     /// # Returns
     /// Pressure in Pa
-    fn pressure_at_height(&self, state: &CurrentNodeState, connection_height: f64, _default_pressure: f64) -> f64 {
+    fn pressure_at_height(
+        &self,
+        state: &CurrentNodeState,
+        connection_height: f64,
+        _default_pressure: f64,
+    ) -> f64 {
         self.pressure_at_connection(state, connection_height)
     }
 }
@@ -317,7 +336,7 @@ impl HydrostaticTank {
             liquid_volume: 0.0,
             liquid_height: 0.0,
             gas_pressure_surface: 101325.0, // Atmospheric pressure (Pa)
-            temperature: 293.15,              // 20°C
+            temperature: 293.15,            // 20°C
         }
     }
 }
@@ -342,9 +361,7 @@ pub fn create_cylindrical_table(radius: f64, height: f64) -> LookupTable1D {
         .collect();
 
     // Create height points (0% to 100% height)
-    let height_points: Vec<f64> = (0..=100)
-        .map(|i| (i as f64 / 100.0) * height)
-        .collect();
+    let height_points: Vec<f64> = (0..=100).map(|i| (i as f64 / 100.0) * height).collect();
 
     LookupTable1D::new(volume_points, height_points)
 }
@@ -370,10 +387,8 @@ pub fn create_conical_table(bottom_radius: f64, top_radius: f64, height: f64) ->
 
         // Volume calculation for conical frustum
         // V = πh/3 (r² + rR + R²)
-        let volume = std::f64::consts::PI * h / 3.0 *
-            (bottom_radius * bottom_radius +
-             bottom_radius * r_at_h +
-             r_at_h * r_at_h);
+        let volume = std::f64::consts::PI * h / 3.0
+            * (bottom_radius * bottom_radius + bottom_radius * r_at_h + r_at_h * r_at_h);
 
         volume_points.push(volume);
         height_points.push(h);
@@ -427,8 +442,8 @@ mod tests {
     #[test]
     fn test_conical_tank_table() {
         let bottom_radius = 0.5; // 0.5m
-        let top_radius = 0.25;   // 0.25m (tapered)
-        let height = 2.0;       // 2m tall
+        let top_radius = 0.25; // 0.25m (tapered)
+        let height = 2.0; // 2m tall
         let table = create_conical_table(bottom_radius, top_radius, height);
 
         // Basic functionality test - just verify the table was created correctly
@@ -474,7 +489,7 @@ mod tests {
         let connected_flows = vec![(
             EdgeIndex::new(0, 1).unwrap(),
             FlowResult::Fluid {
-                liquid_mass_flow: 100.0,     // 100 kg/s inflow
+                liquid_mass_flow: 100.0, // 100 kg/s inflow
                 gas_mass_flow: 0.0,
                 liquid_specific_enthalpy: 100000.0, // 100 kJ/kg
                 gas_specific_enthalpy: 0.0,
@@ -496,7 +511,11 @@ mod tests {
 
         // Check volume increased
         match new_state {
-            CurrentNodeState::HydrostaticTank { liquid_volume, liquid_height, .. } => {
+            CurrentNodeState::HydrostaticTank {
+                liquid_volume,
+                liquid_height,
+                ..
+            } => {
                 assert!(liquid_volume >= 0.0);
                 assert!(liquid_height >= 0.0);
 

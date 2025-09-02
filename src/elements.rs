@@ -360,7 +360,12 @@ pub trait NodeBehavior {
     ///
     /// # Returns
     /// Pressure in Pa at the connection height
-    fn pressure_at_height(&self, state: &CurrentNodeState, connection_height: f64, default_pressure: f64) -> f64 {
+    fn pressure_at_height(
+        &self,
+        state: &CurrentNodeState,
+        connection_height: f64,
+        default_pressure: f64,
+    ) -> f64 {
         default_pressure
     }
 }
@@ -531,7 +536,9 @@ mod tests {
         let current_state = CurrentNodeState::Thermal { temperature: 300.0 };
         let connected_flows = vec![(
             EdgeIndex::new(0, 1).unwrap(),
-            FlowResult::Thermal { thermal_power: 100.0 },
+            FlowResult::Thermal {
+                thermal_power: 100.0,
+            },
         )];
         let external_inputs = ExternalInputs {
             temperature_overrides: std::collections::HashMap::new(),

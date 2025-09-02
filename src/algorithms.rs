@@ -3,8 +3,8 @@
 //! This module provides 1D and 2D lookup tables with linear interpolation
 //! and different search algorithms for breakpoint finding.
 
-use std::cmp::Ordering;
 use std::cell::Cell;
+use std::cmp::Ordering;
 
 /// 1D Lookup Table for fast interpolation of y values from x inputs.
 /// Assumes x is sorted in ascending order.
